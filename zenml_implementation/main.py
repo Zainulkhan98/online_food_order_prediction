@@ -7,6 +7,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+from zenml.client import Client
+import mlflow.sklearn
+import mlflow
 
 from zenml import (step, pipeline)
 
@@ -52,12 +55,13 @@ def split(data: pd.DataFrame, test_size: float, target_column: str) -> Tuple[
 
     return x_train, x_test, y_train, y_test
 
-
-@step
+experiment_tracker = Client().active_stack.experiment_tracker
+@step(experiment_tracker = experiment_tracker.name)
 def modeling(x_train: pd.DataFrame, y_train: pd.Series) -> LogisticRegression:
     """Trains a logistic regression model."""
     model = LogisticRegression(max_iter=10000)
     model.fit(x_train, y_train)
+    mlflow.sklearn.autolog(model)
     return model
 
 
@@ -69,11 +73,12 @@ def predict(model: LogisticRegression, x_test: pd.DataFrame) -> pd.Series:
     return predictions
 
 
-@step
+@step(experiment_tracker= experiment_tracker.name)
 def evaluate(predictions: pd.Series, y_test: pd.Series) -> float:
     """Evaluates model performance using accuracy."""
     accu = accuracy_score(y_test, predictions)
     accuracy = float(accu)
+    mlflow.log_metric("accuracy", accuracy)
     return accuracy
 
 
@@ -97,6 +102,7 @@ def ml_pipeline(data_path: str) -> float:
 
 
 if __name__ == '__main__':
+    print(Client().active_stack.experiment_tracker.get_tracking_uri())
     accuracy = ml_pipeline(data_path='onlinefoods.csv')
     print(accuracy)
 
